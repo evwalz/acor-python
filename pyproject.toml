@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel", "pybind11>=2.10"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "acor"
+version = "0.1.0"
+description = "Asymmetric Correlation Measures: AKC, AGC, CID, and CMA"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"
+authors = [
+    { name = "Eva-Maria Walz", email = "evamaria.walz@gmx.de" },
+]
+keywords = ["statistics", "correlation", "asymmetric", "kendall", "spearman"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+dependencies = [
+    "numpy>=1.22",
+    "scipy>=1.8",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+]
+
+[project.urls]
+Homepage = "https://github.com/evwalz/acor-python"
+Issues = "https://github.com/evwalz/acor-python/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = [
+    "acor",
+    "acor_functions",
+    "acor_internals",
+    "acor_cpp_bindings",
+    "akc_functions",
+    "agc_functions",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

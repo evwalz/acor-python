@@ -1,0 +1,48 @@
+# Python bytecode/cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build/distribution artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# Wheel/local packaging scratch dirs
+dist_wheel_test/
+.tmp_pkg/
+
+# C/C++ build artifacts
+*.so
+*.dylib
+*.dll
+*.o
+*.obj
+*.a
+*.lib
+
+# CMake build dirs and files
+cpp/build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Test/coverage outputs
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# IDE/editor/system files
+.DS_Store
+.idea/
+.vscode/
+
