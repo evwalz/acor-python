@@ -133,6 +133,11 @@ def _tau_y_stats(y: np.ndarray) -> tuple[float, float]:
     return float(expectation), float(p_tie_y)
 
 
+def _p_Y_plugin(p_tie_y: float, n: int) -> float:
+    """Finite-sample plugin adjustment for Y tie probability (matches R ``akc_functions.R``)."""
+    return float((n - 1) / n * p_tie_y + 1.0 / n)
+
+
 def _f_bar(x_value: float, x: np.ndarray) -> float:
     return float(np.mean(x < x_value) + 0.5 * np.mean(x == x_value))
 
@@ -273,18 +278,23 @@ def _akc_asymptotic_variance(x: np.ndarray, y: np.ndarray) -> tuple[float, float
 
     akc, tau_xy = _compute_kendall_stats(x, y)
     n = len(x)
+    p_plugin = _p_Y_plugin(p_tie_y, n)
+    tau_y_plugin = 1.0 - p_plugin
+    if (1.0 - p_plugin) <= 1e-12:
+        raise ValueError("AKC variance undefined (plugin tie probability too large).")
+
     k_tau_values = _k_tau_vector(x, y, tau_xy)
-    k_p_values = _k_p_vector(y, tau_y)
+    k_p_values = _k_p_vector(y, tau_y_plugin)
 
     squared_diffs = np.empty(n, dtype=float)
     for i in range(n):
         k_tau_i = k_tau_values[i]
         k_p_i = k_p_values[i]
-        diff = k_tau_i - (tau_xy / (1.0 - p_tie_y)) * k_p_i
+        diff = k_tau_i + (tau_xy / (1.0 - p_plugin)) * k_p_i
         squared_diffs[i] = diff * diff
 
     expectation = np.mean(squared_diffs)
-    variance = (4.0 / (1.0 - p_tie_y) ** 2) * expectation
+    variance = (4.0 / (1.0 - p_plugin) ** 2) * expectation
     return float(akc), float(variance)
 
 
@@ -360,17 +370,21 @@ def compute_akc_variance_auto(x, y, iid: bool = True) -> dict:
             raise ValueError("AKC variance undefined because Y is almost fully tied.")
         akc, tau_xy = _compute_kendall_stats(x, y)
         n = len(x)
+        p_plugin = _p_Y_plugin(p_tie_y, n)
+        tau_y_plugin = 1.0 - p_plugin
         k_tau = _k_tau_vector(x, y, tau_xy)
-        k_p = _k_p_vector(y, tau_y)
-        adjusted_k = k_tau - (tau_xy / (1.0 - p_tie_y)) * k_p
-        scale_factor = 4.0 / (1.0 - p_tie_y) ** 2
+        k_p = _k_p_vector(y, tau_y_plugin)
+        adjusted_k = k_tau + (tau_xy / (1.0 - p_plugin)) * k_p
+        scale_factor = 4.0 / (1.0 - p_plugin) ** 2
         var = _hac_variance_univariate(adjusted_k, scale_factor)
-        var_ind = _ind_variance_akc_hac(x, y, p_tie_y)
+        var_ind = _ind_variance_akc_hac(x, y, p_plugin)
         return {"akc": akc, "var": var, "var_ind": var_ind}
 
     _, p_tie_y = _tau_y_stats(y)
     akc, var = _akc_asymptotic_variance(x, y)
-    var_ind = _ind_variance_akc_iid(x, y, p_tie_y)
+    n = len(y)
+    p_plugin = _p_Y_plugin(p_tie_y, n)
+    var_ind = _ind_variance_akc_iid(x, y, p_plugin)
     return {"akc": akc, "var": var, "var_ind": var_ind}
 
 
@@ -385,11 +399,13 @@ def compute_akc_multivariate_variance_auto(x, y, iid: bool = True) -> dict:
     tau_vector = np.zeros(m, dtype=float)
     k_tau_values = np.zeros((n, m), dtype=float)
 
-    tau_y, p_tie_y = _tau_y_stats(y)
+    _, p_tie_y = _tau_y_stats(y)
     if (1.0 - p_tie_y) <= 1e-12:
         raise ValueError("AKC covariance undefined because Y is almost fully tied.")
 
-    k_p_values = _k_p_vector(y, tau_y)
+    p_plugin = _p_Y_plugin(p_tie_y, n)
+    tau_y_plugin = 1.0 - p_plugin
+    k_p_values = _k_p_vector(y, tau_y_plugin)
 
     for k in range(m):
         x_k = x[:, k]
@@ -399,17 +415,17 @@ def compute_akc_multivariate_variance_auto(x, y, iid: bool = True) -> dict:
 
         k_tau_values[:, k] = _k_tau_vector(x_k, y, tau_k)
 
-    scale_factor = 4.0 / (1.0 - p_tie_y) ** 2
+    scale_factor = 4.0 / (1.0 - p_plugin) ** 2
     adjusted_k = np.empty((n, m), dtype=float)
     for k in range(m):
-        adjusted_k[:, k] = k_tau_values[:, k] - (tau_vector[k] / (1.0 - p_tie_y)) * k_p_values
+        adjusted_k[:, k] = k_tau_values[:, k] + (tau_vector[k] / (1.0 - p_plugin)) * k_p_values
 
     if iid:
         sigma = scale_factor * (adjusted_k.T @ adjusted_k) / n
-        sigma_ind = _ind_covariance_akc_iid(x, y, p_tie_y)
+        sigma_ind = _ind_covariance_akc_iid(x, y, p_plugin)
     else:
         sigma = _hac_covariance_multivariate(adjusted_k, scale_factor)
-        sigma_ind = _ind_covariance_akc_hac(x, y, p_tie_y)
+        sigma_ind = _ind_covariance_akc_hac(x, y, p_plugin)
 
     return {"akc_vector": akc_vector, "Sigma": sigma, "Sigma_ind": sigma_ind}
 
@@ -420,13 +436,15 @@ def compute_akc_variance_ij(x, y, iid: bool = True) -> dict:
     y = np.asarray(y, dtype=float)
     result = native_akc_ij_cpp(x, y)
     _, p_tie_y = _tau_y_stats(y)
+    n = len(y)
+    p_plugin = _p_Y_plugin(p_tie_y, n)
     if iid:
         var = float(result["var_ij"])
-        var_ind = _ind_variance_akc_iid(x, y, p_tie_y)
+        var_ind = _ind_variance_akc_iid(x, y, p_plugin)
     else:
         ic = np.asarray(result["ic"], dtype=float)
         var = _hac_variance_univariate(ic, scale_factor=1.0)
-        var_ind = _ind_variance_akc_hac(x, y, p_tie_y)
+        var_ind = _ind_variance_akc_hac(x, y, p_plugin)
     return {
         "akc": float(result["akc"]),
         "var": var,
@@ -452,12 +470,13 @@ def compute_akc_multivariate_variance_ij(x, y, iid: bool = True) -> dict:
         ic_matrix[:, k] = np.asarray(result_k["ic"], dtype=float)
 
     _, p_tie_y = _tau_y_stats(y)
+    p_plugin = _p_Y_plugin(p_tie_y, n)
     if iid:
         sigma = (ic_matrix.T @ ic_matrix) / n
-        sigma_ind = _ind_covariance_akc_iid(x, y, p_tie_y)
+        sigma_ind = _ind_covariance_akc_iid(x, y, p_plugin)
     else:
         sigma = _hac_covariance_multivariate(ic_matrix, scale_factor=1.0)
-        sigma_ind = _ind_covariance_akc_hac(x, y, p_tie_y)
+        sigma_ind = _ind_covariance_akc_hac(x, y, p_plugin)
     return {
         "akc_vector": akc_vector,
         "Sigma": sigma,

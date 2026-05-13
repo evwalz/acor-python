@@ -32,7 +32,7 @@ x = np.random.default_rng(123).normal(size=200)
 y = np.random.default_rng(456).normal(size=200)
 
 print(acor(x, y, method="akc"))
-print(acor_test(x, y, method="akc", alternative="two.sided", variance="delta"))
+print(acor_test(x, y, method="akc", alternative="two.sided", variance="plugin"))
 ```
 
 ## Methods

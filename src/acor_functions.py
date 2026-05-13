@@ -168,7 +168,7 @@ def acor_test(
     conf_level: float = 0.95,
     iid: bool = True,
     fisher: bool = False,
-    variance: str = "delta",
+    variance: str = "ij",
 ) -> AcorTestResult:
     """Statistical test for currently supported methods.
 

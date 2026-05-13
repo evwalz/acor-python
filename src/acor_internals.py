@@ -4,7 +4,7 @@ import numpy as np
 
 VALID_METHODS = {"akc", "agc", "cid", "cma"}
 VALID_ALTERNATIVES = {"two.sided", "less", "greater"}
-VALID_VARIANCE_METHODS = {"delta", "ij"}
+VALID_VARIANCE_METHODS = {"plugin", "ij"}
 
 
 def validate_inputs(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray, int, int]:
@@ -66,6 +66,9 @@ def validate_conf_level(conf_level: float) -> float:
 
 def validate_variance_method(variance: str) -> str:
     variance = variance.lower()
+    if variance == "delta":
+        # Backward-compatible alias.
+        variance = "plugin"
     if variance not in VALID_VARIANCE_METHODS:
         raise ValueError(
             f"variance must be one of {VALID_VARIANCE_METHODS!r}, got {variance!r}"
