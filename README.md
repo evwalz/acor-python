@@ -1,39 +1,73 @@
-# acor (Python)
+# asym-correlation (Python)
 
-Python package for **Asymmetric Correlation Measures**: AKC, AGC, CID, and CMA.
+Python implementation of **Asymmetric Correlation Measures** (acor): AKC, AGC, CID, and CMA.
 
 ## Install
 
-From PyPI (after release):
+**From PyPI** (after the first release):
 
 ```bash
-pip install acor
+pip install asym-correlation
 ```
 
-From GitHub:
+**From GitHub** (builds the C++ extension on your machine):
 
 ```bash
 pip install "git+https://github.com/evwalz/acor-python.git"
 ```
 
-Verify native extension and package import:
+GitHub installs require a C++17 compiler and Python headers. PyPI wheels do not.
+
+The distribution is named `asym-correlation`, but you import it as `acor`:
+
+```python
+from acor import acor, acor_test
+```
+
+Verify the install:
 
 ```bash
 python -c "import acor, _acor_cpp; print('ok', acor.__name__, _acor_cpp.__file__)"
 ```
 
-## Python Usage
+## Usage
 
 ```python
 import numpy as np
 from acor import acor, acor_test
 
-x = np.random.default_rng(123).normal(size=200)
-y = np.random.default_rng(456).normal(size=200)
+rng = np.random.default_rng(123)
+x = rng.normal(size=200)
+y = rng.normal(size=200)
 
+# Point estimate only
 print(acor(x, y, method="akc"))
-print(acor_test(x, y, method="akc", alternative="two.sided", variance="plugin"))
+
+# Test with default inference (IJ variance, IID)
+result = acor_test(x, y, method="akc")
+print(result.estimate, result.pvalue, result.conf_int)
+
+# Plug-in asymptotic variance instead of IJ
+result_plugin = acor_test(x, y, method="akc", variance="plugin")
+
+# Multiple predictors: x shape (n, m)
+X = rng.normal(size=(200, 3))
+print(acor(X, y, method="agc").statistic)
 ```
+
+### `acor_test` options
+
+| Parameter | Default | Meaning |
+|-----------|---------|---------|
+| `method` | `"akc"` | `"akc"`, `"agc"`, `"cid"`, or `"cma"` |
+| `variance` | `"ij"` | `"ij"` (infinitesimal jackknife) or `"plugin"` (closed-form kernel variance). `"delta"` is accepted as an alias for `"plugin"`. |
+| `iid` | `True` | If `False`, use a Bartlett-kernel HAC correction (time-series inference). |
+| `alternative` | `"two.sided"` | `"two.sided"`, `"less"`, or `"greater"` |
+| `conf_level` | `0.95` | Confidence level for `result.conf_int` |
+| `fisher` | `False` | If `True`, build the CI via Fisher transformation |
+
+`result.variance` is the asymptotic variance of the estimator; `result.variance_ind` is the
+independence benchmark variance (same closed form regardless of `variance`).
 
 ## Methods
 
@@ -42,37 +76,12 @@ print(acor_test(x, y, method="akc", alternative="two.sided", variance="plugin"))
 | AKC, AGC | [-1, 1] | 0 |
 | CID, CMA | [0, 1] | 0.5 |
 
-- **AKC** = Asymmetric Kendall Correlation (Kendall framework)
-- **AGC** = Asymmetric Grade Correlation (Spearman framework)
-- **CID** = (AKC + 1) / 2
-- **CMA** = (AGC + 1) / 2
+- **AKC** — Asymmetric Kendall Correlation (Kendall / U-statistic framework)
+- **AGC** — Asymmetric Grade Correlation (mid-rank / Spearman framework)
+- **CID** — (AKC + 1) / 2
+- **CMA** — (AGC + 1) / 2
 
-## Native extension build (developers)
+## Native extension
 
-IJ AKC/AGC and Fenwick-based kernels are provided by the native module `_acor_cpp`.
-For end users this is bundled in wheels. Manual build is mainly for development.
-
-Build prerequisites:
-- `pybind11`
-- `cmake`
-- a C++17 compiler
-
-Example local build:
-
-```bash
-python -m pip install pybind11
-cmake -S cpp -B cpp/build -Dpybind11_DIR="$(python -m pybind11 --cmakedir)"
-cmake --build cpp/build --config Release
-```
-
-Then make sure `_acor_cpp` is importable (for local dev usually `PYTHONPATH="src:cpp/build"`).
-
-## Wheel/Release automation
-
-GitHub Actions workflow `.github/workflows/wheels.yml` builds wheels for:
-- Linux
-- macOS (x86_64 + arm64)
-- Windows
-
-On version tags (`v*`), built wheels are published to PyPI.
-
+IJ AKC/AGC and Fenwick-based kernels live in `_acor_cpp`. The install paths above build
+this extension automatically. Developers can also build manually — see `cpp/CMakeLists.txt`.

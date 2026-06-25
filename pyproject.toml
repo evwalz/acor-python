@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel", "pybind11>=2.10"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "acor"
+name = "asym-correlation"
 version = "0.1.0"
 description = "Asymmetric Correlation Measures: AKC, AGC, CID, and CMA"
 readme = "README.md"
@@ -46,6 +46,3 @@ py-modules = [
     "akc_functions",
     "agc_functions",
 ]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]

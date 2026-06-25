@@ -170,10 +170,38 @@ def acor_test(
     fisher: bool = False,
     variance: str = "ij",
 ) -> AcorTestResult:
-    """Statistical test for currently supported methods.
+    """Asymptotic test for AKC, AGC, CID, or CMA.
 
-    Backend variance/covariance routines are placeholders and are expected
-    to be implemented later.
+    Parameters
+    ----------
+    x : array_like, shape (n,) or (n, m)
+        Predictor(s). For multiple predictors, columns are separate X variables.
+    y : array_like, shape (n,)
+        Outcome (must have at least two distinct values; no NaNs).
+    method : {"akc", "agc", "cid", "cma"}
+        Correlation measure to test.
+    alternative : {"two.sided", "less", "greater"}
+        Alternative hypothesis for the z- or chi-squared test.
+    conf_level : float
+        Confidence level in (0, 1) for ``conf_int``.
+    iid : bool
+        If True (default), assume IID observations. If False, apply a Bartlett-kernel
+        HAC correction to the influence-function / kernel series.
+    fisher : bool
+        If True, construct ``conf_int`` via Fisher transformation.
+    variance : {"ij", "plugin"}
+        Variance estimator. Default ``"ij"`` uses the native infinitesimal-jackknife
+        path; ``"plugin"`` uses the closed-form plug-in kernel variance (matches the
+        R package when ``variance = "plugin"``). ``"delta"`` is accepted as a
+        deprecated alias for ``"plugin"``.
+
+    Returns
+    -------
+    AcorTestResult
+        For one predictor: ``estimate``, ``variance``, ``variance_ind``, ``statistic``
+        (z), ``pvalue``, ``conf_int``, and independence counterparts where applicable.
+        For multiple predictors: global chi-squared test plus per-predictor results in
+        ``results`` / ``pairwise_results``.
     """
     method = validate_method(method)
     alternative = validate_alternative(alternative)
