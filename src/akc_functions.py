@@ -93,13 +93,46 @@ def _compute_kendall_stats(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
     return float(tau), float(expectation)
 
 
-def _k_tau_vector(x: np.ndarray, y: np.ndarray, tau_xy: float) -> np.ndarray:
+def _f_bar_vector(x: np.ndarray) -> np.ndarray:
+    n = len(x)
+    return (rankdata(x, method="average") - 0.5) / n
+
+
+def _g_bar_vector(y: np.ndarray) -> np.ndarray:
+    return _f_bar_vector(y)
+
+
+def _h_bar_vector(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     if (not _is_binary(y)) and has_native_extension():
-        h_bar = np.asarray(native_h_bar_vec_v2_cpp(x, y), dtype=float)
-        f_bar = (rankdata(x, method="average") - 0.5) / len(x)
-        g_bar = (rankdata(y, method="average") - 0.5) / len(y)
-        return 4.0 * h_bar - 2.0 * (f_bar + g_bar) + 1.0 - tau_xy
-    return np.array([_k_tau(x[i], y[i], x, y, tau_xy) for i in range(len(x))], dtype=float)
+        return np.asarray(native_h_bar_vec_v2_cpp(x, y), dtype=float)
+    return np.array([_h_bar(x[i], y[i], x, y) for i in range(len(x))], dtype=float)
+
+
+def _tau_plugin_from_h_bar(h_bar: np.ndarray) -> float:
+    """Plug-in Kendall tau from empirical mid-bivariate CDF (variance path only)."""
+    return float(4.0 * np.mean(h_bar) - 1.0)
+
+
+def _k_tau_from_h_bar(
+    h_bar: np.ndarray, f_bar: np.ndarray, g_bar: np.ndarray, tau: float
+) -> np.ndarray:
+    return 4.0 * h_bar - 2.0 * (f_bar + g_bar) + 1.0 - tau
+
+
+def _k_tau_vector(x: np.ndarray, y: np.ndarray, tau_xy: float) -> np.ndarray:
+    h_bar = _h_bar_vector(x, y)
+    return _k_tau_from_h_bar(h_bar, _f_bar_vector(x), _g_bar_vector(y), tau_xy)
+
+
+def _akc_plugin_kernel(
+    x: np.ndarray, y: np.ndarray, p_plugin: float, tau_y_plugin: float
+) -> np.ndarray:
+    """Plug-in AKC variance kernel: tau_plug in K_tau and cross term."""
+    h_bar = _h_bar_vector(x, y)
+    tau_plug = _tau_plugin_from_h_bar(h_bar)
+    k_tau = _k_tau_from_h_bar(h_bar, _f_bar_vector(x), _g_bar_vector(y), tau_plug)
+    k_p = _k_p_vector(y, tau_y_plugin)
+    return k_tau + (tau_plug / (1.0 - p_plugin)) * k_p
 
 
 # Python AKC functions
@@ -272,29 +305,20 @@ def _ind_lrv_multivariate(
 
 def _akc_asymptotic_variance(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
     """Return (akc estimate, asymptotic variance) using kernel-based formula."""
-    tau_y, p_tie_y = _tau_y_stats(y)
+    _, p_tie_y = _tau_y_stats(y)
     if (1.0 - p_tie_y) <= 1e-12:
         raise ValueError("AKC variance undefined because Y is almost fully tied.")
 
-    akc, tau_xy = _compute_kendall_stats(x, y)
+    akc, _ = _compute_kendall_stats(x, y)
     n = len(x)
     p_plugin = _p_Y_plugin(p_tie_y, n)
     tau_y_plugin = 1.0 - p_plugin
     if (1.0 - p_plugin) <= 1e-12:
         raise ValueError("AKC variance undefined (plugin tie probability too large).")
 
-    k_tau_values = _k_tau_vector(x, y, tau_xy)
-    k_p_values = _k_p_vector(y, tau_y_plugin)
-
-    squared_diffs = np.empty(n, dtype=float)
-    for i in range(n):
-        k_tau_i = k_tau_values[i]
-        k_p_i = k_p_values[i]
-        diff = k_tau_i + (tau_xy / (1.0 - p_plugin)) * k_p_i
-        squared_diffs[i] = diff * diff
-
-    expectation = np.mean(squared_diffs)
-    variance = (4.0 / (1.0 - p_plugin) ** 2) * expectation
+    adjusted_k = _akc_plugin_kernel(x, y, p_plugin, tau_y_plugin)
+    scale_factor = 4.0 / (1.0 - p_plugin) ** 2
+    variance = scale_factor * np.mean(adjusted_k**2)
     return float(akc), float(variance)
 
 
@@ -365,16 +389,14 @@ def compute_akc_variance_auto(x, y, iid: bool = True) -> dict:
     x = np.asarray(x)
     y = np.asarray(y)
     if not iid:
-        tau_y, p_tie_y = _tau_y_stats(y)
+        _, p_tie_y = _tau_y_stats(y)
         if (1.0 - p_tie_y) <= 1e-12:
             raise ValueError("AKC variance undefined because Y is almost fully tied.")
-        akc, tau_xy = _compute_kendall_stats(x, y)
+        akc, _ = _compute_kendall_stats(x, y)
         n = len(x)
         p_plugin = _p_Y_plugin(p_tie_y, n)
         tau_y_plugin = 1.0 - p_plugin
-        k_tau = _k_tau_vector(x, y, tau_xy)
-        k_p = _k_p_vector(y, tau_y_plugin)
-        adjusted_k = k_tau + (tau_xy / (1.0 - p_plugin)) * k_p
+        adjusted_k = _akc_plugin_kernel(x, y, p_plugin, tau_y_plugin)
         scale_factor = 4.0 / (1.0 - p_plugin) ** 2
         var = _hac_variance_univariate(adjusted_k, scale_factor)
         var_ind = _ind_variance_akc_hac(x, y, p_plugin)
@@ -396,8 +418,7 @@ def compute_akc_multivariate_variance_auto(x, y, iid: bool = True) -> dict:
         x = x[:, np.newaxis]
     n, m = x.shape
     akc_vector = np.zeros(m, dtype=float)
-    tau_vector = np.zeros(m, dtype=float)
-    k_tau_values = np.zeros((n, m), dtype=float)
+    adjusted_k = np.zeros((n, m), dtype=float)
 
     _, p_tie_y = _tau_y_stats(y)
     if (1.0 - p_tie_y) <= 1e-12:
@@ -406,19 +427,19 @@ def compute_akc_multivariate_variance_auto(x, y, iid: bool = True) -> dict:
     p_plugin = _p_Y_plugin(p_tie_y, n)
     tau_y_plugin = 1.0 - p_plugin
     k_p_values = _k_p_vector(y, tau_y_plugin)
+    g_bar = _g_bar_vector(y)
 
     for k in range(m):
         x_k = x[:, k]
-        akc_k, tau_k = _compute_kendall_stats(x_k, y)
+        akc_k, _ = _compute_kendall_stats(x_k, y)
         akc_vector[k] = akc_k
-        tau_vector[k] = tau_k
 
-        k_tau_values[:, k] = _k_tau_vector(x_k, y, tau_k)
+        h_bar = _h_bar_vector(x_k, y)
+        tau_plug_k = _tau_plugin_from_h_bar(h_bar)
+        k_tau = _k_tau_from_h_bar(h_bar, _f_bar_vector(x_k), g_bar, tau_plug_k)
+        adjusted_k[:, k] = k_tau + (tau_plug_k / (1.0 - p_plugin)) * k_p_values
 
     scale_factor = 4.0 / (1.0 - p_plugin) ** 2
-    adjusted_k = np.empty((n, m), dtype=float)
-    for k in range(m):
-        adjusted_k[:, k] = k_tau_values[:, k] + (tau_vector[k] / (1.0 - p_plugin)) * k_p_values
 
     if iid:
         sigma = scale_factor * (adjusted_k.T @ adjusted_k) / n
