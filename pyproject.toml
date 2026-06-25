@@ -25,13 +25,6 @@ dependencies = [
     "scipy>=1.8",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "pytest-cov",
-    "rpy2>=3.5",
-]
-
 [project.urls]
 Homepage = "https://github.com/evwalz/acor-python"
 Issues = "https://github.com/evwalz/acor-python/issues"
