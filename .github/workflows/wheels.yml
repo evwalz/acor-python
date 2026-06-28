@@ -26,11 +26,17 @@ jobs:
           python-version: "3.12"
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.20.0
+        uses: pypa/cibuildwheel@v2.23.4
         env:
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-*"
           CIBW_SKIP: "*-musllinux_*"
           CIBW_ARCHS_MACOS: "x86_64 arm64"
+          # SciPy/NumPy wheels for cp311+ require manylinux_2_28 (glibc >= 2.28).
+          # cibuildwheel 2.20 defaults to manylinux2014, so pip falls back to
+          # building SciPy from source and fails without OpenBLAS.
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
+          CIBW_MANYLINUX_I686_IMAGE: manylinux_2_28
           CIBW_TEST_COMMAND: "python -c \"import acor, _acor_cpp; print(acor.__name__)\""
 
       - name: Upload wheels artifact
