@@ -384,7 +384,7 @@ py::dict akc_ij_cpp(py::array_t<double, py::array::c_style | py::array::forcecas
   if (x_in.shape(0) != y_in.shape(0)) {
     throw std::invalid_argument("x and y must have the same length.");
   }
-  const ssize_t n = x_in.shape(0);
+  const int n = static_cast<int>(x_in.shape(0));
   if (n < 2) {
     throw std::invalid_argument("Need at least 2 observations.");
   }
@@ -393,7 +393,7 @@ py::dict akc_ij_cpp(py::array_t<double, py::array::c_style | py::array::forcecas
   auto y = y_in.unchecked<1>();
 
   std::vector<double> xvals(static_cast<size_t>(n)), yvals(static_cast<size_t>(n));
-  for (ssize_t i = 0; i < n; ++i) {
+  for (int i = 0; i < n; ++i) {
     xvals[static_cast<size_t>(i)] = x(i);
     yvals[static_cast<size_t>(i)] = y(i);
   }
@@ -486,7 +486,7 @@ py::dict akc_ij_cpp(py::array_t<double, py::array::c_style | py::array::forcecas
 
   double sum_HA = 0.0;
   double sum_HB = 0.0;
-  for (ssize_t i = 0; i < n; ++i) {
+  for (int i = 0; i < n; ++i) {
     sum_HA += H_A[static_cast<size_t>(i)];
     sum_HB += H_B[static_cast<size_t>(i)];
   }
@@ -503,7 +503,7 @@ py::dict akc_ij_cpp(py::array_t<double, py::array::c_style | py::array::forcecas
   auto dA = dA_arr.mutable_unchecked<1>();
   auto dB = dB_arr.mutable_unchecked<1>();
   double sum_ic2 = 0.0;
-  for (ssize_t i = 0; i < n; ++i) {
+  for (int i = 0; i < n; ++i) {
     const double n_dA_i = 2.0 * (H_A[static_cast<size_t>(i)] / static_cast<double>(n - 1) - A);
     const double n_dB_i = 2.0 * (H_B[static_cast<size_t>(i)] / static_cast<double>(n - 1) - B);
     const double ic_i = n_dA_i / B - (A / (B * B)) * n_dB_i;
